@@ -19,3 +19,6 @@
 | 2026-11-26 | Inactive themes: allow one spare default "Twenty*" theme | WordPress recommends keeping a fallback theme. |
 | 2026-11-26 | Login protection is detected by plugin folder list (filterable: `iwiesa_login_protection_plugins`) | No reliable API to detect 2FA; host-level protection can't be seen, and the result says so. |
 | 2026-11-26 | Banner/icon/screenshots not included yet | Same as Health Check: artwork pending; real screenshots to be taken from www.iworks.new before submission. |
+
+| 2026-11-27 | Smoke harness sets `AUTOMATIC_UPDATER_DISABLED` and `WP_AUTO_UPDATE_CORE` false, clears `.maintenance` / `auto_updater.lock` | WP 6.5.15 smoke was returning HTTP 503 on admin tabs after the first page while core tried to auto-update. |
+| 2026-11-27 | `bin/install-wp-tests.sh` resolves X.Y to latest X.Y.Z + matching tags/ suite | Same tag-matching fix as the other plugins; keeps future pin jobs safe. |

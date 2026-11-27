@@ -60,7 +60,7 @@ docker run -d --name "$DB" --network "$NET" \
 docker create --name "$WP" --network "$NET" \
 	-e WORDPRESS_DB_HOST="$DB" -e WORDPRESS_DB_USER=root -e WORDPRESS_DB_PASSWORD=root -e WORDPRESS_DB_NAME=wp \
 	-e WORDPRESS_DEBUG=1 \
-	-e WORDPRESS_CONFIG_EXTRA="define( 'WP_DEBUG_LOG', '/tmp/wp-debug.log' ); define( 'WP_DEBUG_DISPLAY', false ); define( 'WP_ENVIRONMENT_TYPE', 'production' );" \
+	-e WORDPRESS_CONFIG_EXTRA="define( 'WP_DEBUG_LOG', '/tmp/wp-debug.log' ); define( 'WP_DEBUG_DISPLAY', false ); define( 'WP_ENVIRONMENT_TYPE', 'production' ); define( 'AUTOMATIC_UPDATER_DISABLED', true ); define( 'WP_AUTO_UPDATE_CORE', false );" \
 	"$IMAGE" >/dev/null
 if [ -n "$CORE" ]; then
 	docker cp "$CORE/." "$WP:/var/www/html/"
@@ -127,6 +127,9 @@ IP="$(docker inspect -f "{{(index .NetworkSettings.Networks \"$NET\").IPAddress}
 C=(curl -sS --resolve "localhost:80:$IP" -b "$WORK/jar" -c "$WORK/jar")
 "${C[@]}" -o /dev/null http://localhost/wp-login.php
 "${C[@]}" -o /dev/null -d "log=smokeadmin&pwd=smoke-pass-123&testcookie=1&redirect_to=http%3A%2F%2Flocalhost%2Fwp-admin%2F" http://localhost/wp-login.php
+# Old WP cores try to auto-update in admin and leave a .maintenance 503; keep the harness stable.
+docker exec "$WP" rm -f /var/www/html/.maintenance
+wp option delete auto_updater.lock >/dev/null 2>&1 || true
 
 page() {
 	local url="$1" out="$2" expect="$3" code
