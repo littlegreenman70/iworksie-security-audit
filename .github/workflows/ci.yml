@@ -1,0 +1,217 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    name: PHP ${{ matrix.php }} quality
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Dev tooling (Strauss 0.32 / Symfony Console) needs PHP 8+. Plugin runtime remains PHP 7.4+.
+        php: ['8.3']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: |
+          # Drop the local path repo (missing on the runner) so Composer uses the public VCS repo.
+          # composer.lock is gitignored; resolve fresh from composer.json.
+          php -r '
+          $path = "composer.json";
+          $j = json_decode( file_get_contents( $path ), true );
+          $j["repositories"] = array_values( array_filter(
+            isset( $j["repositories"] ) ? $j["repositories"] : array(),
+            static function ( $r ) {
+              return ( isset( $r["type"] ) ? $r["type"] : "" ) !== "path";
+            }
+          ) );
+          file_put_contents( $path, json_encode( $j, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . "\n" );
+          '
+          composer update --no-interaction --prefer-dist
+
+      - name: PHPCS
+        run: composer lint
+
+      - name: PHPStan
+        run: composer analyse
+
+      - name: Unit tests
+        run: composer test:unit
+
+  integration:
+    name: Integration (WP + MySQL)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_DATABASE: iworks_tests_sa
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mysqli
+          coverage: none
+          tools: composer:v2
+
+      - name: Install Subversion
+        run: sudo apt-get update && sudo apt-get install -y subversion
+
+      - name: Install dependencies
+        run: |
+          php -r '
+          $path = "composer.json";
+          $j = json_decode( file_get_contents( $path ), true );
+          $j["repositories"] = array_values( array_filter(
+            isset( $j["repositories"] ) ? $j["repositories"] : array(),
+            static function ( $r ) {
+              return ( isset( $r["type"] ) ? $r["type"] : "" ) !== "path";
+            }
+          ) );
+          file_put_contents( $path, json_encode( $j, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . "\n" );
+          '
+          composer update --no-interaction --prefer-dist
+
+      - name: Install WP test suite
+        run: bash bin/install-wp-tests.sh iworks_tests_sa root '' 127.0.0.1 latest
+
+      - name: Integration tests
+        env:
+          WP_TESTS_DIR: ${{ github.workspace }}/tests/wordpress/wordpress-tests-lib
+          IWIESA_TESTSUITE: integration
+        run: composer test:integration
+
+  plugin-check:
+    name: Plugin Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      - name: Build plugin
+        run: |
+          php -r '
+          $path = "composer.json";
+          $j = json_decode( file_get_contents( $path ), true );
+          $j["repositories"] = array_values( array_filter(
+            isset( $j["repositories"] ) ? $j["repositories"] : array(),
+            static function ( $r ) {
+              return ( isset( $r["type"] ) ? $r["type"] : "" ) !== "path";
+            }
+          ) );
+          file_put_contents( $path, json_encode( $j, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . "\n" );
+          '
+          composer update --no-interaction --prefer-dist
+          composer build
+
+      - name: Upload built plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: iworksie-security-audit-build
+          path: build/iworksie-security-audit
+          retention-days: 2
+
+      - name: Plugin Check
+        uses: wordpress/plugin-check-action@v1
+        with:
+          build-dir: './build/iworksie-security-audit'
+          exclude-directories: 'vendor,vendor-prefixed/composer'
+
+  php74-syntax:
+    name: PHP 7.4 syntax (built plugin)
+    needs: plugin-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup PHP 7.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+
+      - name: Download built plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: iworksie-security-audit-build
+          path: build/iworksie-security-audit
+
+      - name: Lint every shipped PHP file
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r -d '' file; do
+            if ! php -l "$file" >/dev/null; then
+              echo "FAIL: $file"
+              fail=1
+            fi
+          done < <(find build/iworksie-security-audit -type f -name '*.php' -print0)
+          if [ "$fail" -ne 0 ]; then
+            echo "PHP 7.4 syntax errors found."
+            exit 1
+          fi
+          echo "All shipped PHP files parse on PHP 7.4."
+
+  smoke:
+    name: Smoke (WP ${{ matrix.wp }}, PHP ${{ matrix.php }})
+    needs: plugin-check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { php: '7.4', wp: '6.5.15' }
+          - { php: '8.0', wp: '6.7.12' }
+          - { php: '8.1', wp: '6.9.12' }
+          - { php: '8.2', wp: 'image' }
+          - { php: '8.3', wp: 'image' }
+          - { php: '8.4', wp: 'image' }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download built plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: iworksie-security-audit-build
+          path: build/iworksie-security-audit
+
+      - name: Fetch WP-CLI and WordPress
+        run: |
+          curl -sSL -o bin/wp-cli.phar https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar
+          if [ "${{ matrix.wp }}" != "image" ]; then
+            mkdir -p /tmp/wp
+            curl -sSL "https://wordpress.org/wordpress-${{ matrix.wp }}.tar.gz" | tar xz -C /tmp/wp --strip-components=1
+          fi
+
+      - name: Smoke test the built plugin in WordPress
+        run: |
+          core=""
+          if [ "${{ matrix.wp }}" != "image" ]; then core=/tmp/wp; fi
+          bash bin/smoke-test.sh "wordpress:php${{ matrix.php }}-apache" build/iworksie-security-audit "$core"
