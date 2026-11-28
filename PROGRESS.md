@@ -14,3 +14,8 @@
 
 - [x] Smoke harness disables automatic updater (fixes WP 6.5.15 PHP 7.4 503s)
 - [x] install-wp-tests.sh tag matching
+
+## 2026-11-28 final 1.0.0 pass
+- Plural sweep: no new count-plus-noun strings needed. Included in suite collision + all-together live check.
+- Lint/analyse/unit/integration/build/Plugin Check re-run; zip refreshed in ~/Downloads.
+

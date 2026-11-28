@@ -22,3 +22,7 @@
 
 | 2026-11-27 | Smoke harness sets `AUTOMATIC_UPDATER_DISABLED` and `WP_AUTO_UPDATE_CORE` false, clears `.maintenance` / `auto_updater.lock` | WP 6.5.15 smoke was returning HTTP 503 on admin tabs after the first page while core tried to auto-update. |
 | 2026-11-27 | `bin/install-wp-tests.sh` resolves X.Y to latest X.Y.Z + matching tags/ suite | Same tag-matching fix as the other plugins; keeps future pin jobs safe. |
+
+### 2026-11-28 plurals / final pass
+- Plural sweep: no new count-plus-noun strings needed. Included in suite collision + all-together live check.
+
