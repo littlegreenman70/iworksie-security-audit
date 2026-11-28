@@ -1,0 +1,26 @@
+/* iWorks.ie Security Audit: plugin-specific tweaks on top of the shared iWorks Tools styles. */
+
+.iwiesa-last-checked {
+	color: #50575e;
+	margin: 0 0 12px;
+}
+
+.iwt-toolbar .iwiesa-about {
+	flex: 1 1 320px;
+	margin: 0;
+	max-width: 70ch;
+}
+
+.iwiesa-report {
+	max-height: 520px;
+	overflow: auto;
+	white-space: pre-wrap;
+}
+
+.iwiesa-settings {
+	max-width: 760px;
+}
+
+.iwiesa-settings .form-table th {
+	width: 180px;
+}
